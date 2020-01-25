@@ -11,6 +11,7 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/grafana/metrictank/cassandra"
+	cassUtils "github.com/grafana/metrictank/cassandra"
 	"github.com/grafana/metrictank/cluster"
 	"github.com/grafana/metrictank/idx"
 	"github.com/grafana/metrictank/idx/memory"
@@ -123,7 +124,6 @@ func (c *CasIdx) InitBare() error {
 
 	// read templates
 	schemaKeyspace := util.ReadEntry(c.Config.SchemaFile, "schema_keyspace").(string)
-	schemaTable := util.ReadEntry(c.Config.SchemaFile, "schema_table").(string)
 
 	// create the keyspace or ensure it exists
 	if c.Config.CreateKeyspace {
@@ -132,12 +132,13 @@ func (c *CasIdx) InitBare() error {
 		if err != nil {
 			return fmt.Errorf("cassandra-idx: failed to initialize cassandra keyspace: %s", err)
 		}
-		log.Infof("cassandra-idx: ensuring that table %s exists.", c.Config.Table)
-		err = tmpSession.Query(fmt.Sprintf(schemaTable, c.Config.Keyspace, c.Config.Table)).Exec()
+
+		err = cassUtils.EnsureTableExists(tmpSession, c.Config.CreateKeyspace, c.Config.Keyspace, c.Config.SchemaFile, "schema_table", c.Config.Table)
 		if err != nil {
-			return fmt.Errorf("cassandra-idx: failed to initialize cassandra table: %s", err)
+			return err
 		}
-		err = c.EnsureTableExists(tmpSession, c.Config.SchemaFile, "schema_archive_table", c.Config.ArchiveTable)
+
+		err = cassUtils.EnsureTableExists(tmpSession, c.Config.CreateKeyspace, c.Config.Keyspace, c.Config.SchemaFile, "schema_archive_table", c.Config.ArchiveTable)
 		if err != nil {
 			return err
 		}
@@ -180,43 +181,6 @@ func (c *CasIdx) InitBare() error {
 		return fmt.Errorf("cassandra-idx: failed to create cassandra session: %s", err)
 	}
 
-	return nil
-}
-
-// EnsureTableExists checks if the specified table exists or not. If it does not exist and the
-// create-keyspace flag is true, then it will create it, if it doesn't exist and the create-keyspace
-// flag is false, then it will return an error. If the table exists then it just returns nil
-// session:    cassandra session
-// schemaFile:  file containing table definition
-// entryName:   identifier of the schema within the file
-// tableName:   name of the table in cassandra
-func (c *CasIdx) EnsureTableExists(session *gocql.Session, schemaFile, entryName, tableName string) error {
-	var err error
-	if session == nil {
-		session, err = c.cluster.CreateSession()
-		if err != nil {
-			return fmt.Errorf("cassandra-idx: failed to create cassandra session: %s", err)
-		}
-	}
-
-	tableSchema := util.ReadEntry(schemaFile, entryName).(string)
-
-	if c.Config.CreateKeyspace {
-		log.Infof("cassandra-idx: ensuring that table %s exists.", tableName)
-		err = session.Query(fmt.Sprintf(tableSchema, c.Config.Keyspace, tableName)).Exec()
-		if err != nil {
-			return fmt.Errorf("cassandra-idx: failed to initialize cassandra table: %s", err)
-		}
-	} else {
-		var keyspaceMetadata *gocql.KeyspaceMetadata
-		keyspaceMetadata, err = session.KeyspaceMetadata(c.Config.Keyspace)
-		if err != nil {
-			return fmt.Errorf("cassandra-idx: failed to read cassandra tables: %s", err)
-		}
-		if _, ok := keyspaceMetadata.Tables[tableName]; !ok {
-			return fmt.Errorf("cassandra-idx: table %s does not exist", tableName)
-		}
-	}
 	return nil
 }
 

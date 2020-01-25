@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+	cassUtils "github.com/grafana/metrictank/cassandra"
 	"github.com/grafana/metrictank/expr/tagquery"
 	"github.com/grafana/metrictank/idx/memory"
 	"github.com/grafana/metrictank/idx/metatags"
@@ -33,11 +34,11 @@ func (c *CasIdx) initMetaRecords(session *gocql.Session) error {
 
 	c.metaRecords = metatags.NewMetaRecordStatusByOrg()
 
-	err := c.EnsureTableExists(session, c.Config.SchemaFile, "schema_meta_record_table", c.Config.MetaRecordTable)
+	err := cassUtils.EnsureTableExists(session, c.Config.CreateKeyspace, c.Config.Keyspace, c.Config.SchemaFile, "schema_meta_record_table", c.Config.MetaRecordTable)
 	if err != nil {
 		return err
 	}
-	return c.EnsureTableExists(session, c.Config.SchemaFile, "schema_meta_record_batch_table", c.Config.MetaRecordBatchTable)
+	return cassUtils.EnsureTableExists(session, c.Config.CreateKeyspace, c.Config.Keyspace, c.Config.SchemaFile, "schema_meta_record_batch_table", c.Config.MetaRecordBatchTable)
 }
 
 func (c *CasIdx) pollStore() {
